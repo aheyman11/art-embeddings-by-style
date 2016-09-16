@@ -139,6 +139,8 @@ def main(argv):
         for filename in filenames:
             embeddings[count, :] = flattened_gram(get_imarray(os.path.join(im_dir ,filename)), sess)
             count += 1
+            if count % 10 == 0:
+                print("Embedded " + str(count) + " images")
             
     print("Large embeddings generated. Shape: " + str(embeddings.shape))
 
