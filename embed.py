@@ -1,8 +1,7 @@
-import sys, getopt
+import sys
 import os
 from scipy import ndimage, misc
 from six.moves import cPickle as pickle
-import csv
 import tensorflow as tf
 import numpy as np
 from sklearn.manifold import TSNE
