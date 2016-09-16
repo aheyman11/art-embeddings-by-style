@@ -8,6 +8,7 @@ from sklearn.manifold import TSNE
 import pickle
 import scipy.io
 import pylab
+import argparse
 
 model = {}
 vgg_layers = None
@@ -115,25 +116,15 @@ def distance(fg1, fg2):
         dist += (1.0 / (4 * NUM_CHANNELS[i] * LAYER_IM_SIZE[i]**2)) * (np.linalg.matrix_power(square_1 - square_2, 2)).sum()
     return dist
 
-def main(argv):
+def main():
     global vgg_layers
-    usage = "usage: python embed.py [image_directory] [output_directory]"
-    im_dir = None
-    output_dir = None
-    # parse command line arguments
-    if len(argv) != 2:
-        print(usage)
-        sys.exit()
-    if os.path.isdir(argv[0]) == False:
-        print(argv[0] + " is not a valid directory")
-        sys.exit()
-    else:
-        im_dir = argv[0]
-    if os.path.isdir(argv[1]) == False:
-        print(argv[1] + " is not a valid directory")
-        sys.exit()
-    else:
-        output_dir = argv[1]
+    # parse the command line arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('im_dir', help="directory containing the input images")
+    parser.add_argument('-l', '--labels', help="csv file containing numerical image labels by filename")
+    parser.add_argument('-d', '--dump', help="location to dump the 2D image style embeddings")
+    
+    args = parser.parse_args()
 
     # load VGG model matrix from file
     vgg = scipy.io.loadmat(VGG_MODEL)
@@ -147,7 +138,7 @@ def main(argv):
     del vgg # to free up memory
 
     filenames = []
-    for filename in os.listdir(im_dir):
+    for filename in os.listdir(args.im_dir):
         if os.path.splitext(filename)[1] in ('.jpg', '.png'):
             filenames.append(os.path.split(filename)[1])
 
@@ -156,7 +147,7 @@ def main(argv):
     with tf.Session(graph=graph) as sess:
         count = 0
         for filename in filenames:
-            embeddings[count, :] = flattened_gram(get_imarray(os.path.join(im_dir ,filename)), sess)
+            embeddings[count, :] = flattened_gram(get_imarray(os.path.join(args.im_dir ,filename)), sess)
             count += 1
             if count % 10 == 0:
                 print("Embedded " + str(count) + " images")
@@ -169,8 +160,10 @@ def main(argv):
     print("2D embeddings generated")
 
     plot_data = {'embeddings': two_d_embeddings, 'filenames': filenames}
-    pickle.dump( plot_data, open( os.path.join(output_dir, os.path.split(im_dir)[1]) + '_embed.pickle', "wb" ) )
-    print("Pickle dumped")
+
+    if args.dump != None:
+        pickle.dump( plot_data, open( os.path.join(args.dump, os.path.split(args.im_dir)[1]) + '_embed.pickle', "wb" ) )
+        print("Pickle dumped")
 
     # def plot(embeddings):
     #   fig = pylab.figure(figsize=(15,15))  # in inches
@@ -188,7 +181,7 @@ def main(argv):
     # plot(two_d_embeddings)
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main()
 
 
 
