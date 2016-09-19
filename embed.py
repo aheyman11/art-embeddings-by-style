@@ -5,10 +5,11 @@ from six.moves import cPickle as pickle
 import tensorflow as tf
 import numpy as np
 from sklearn.manifold import TSNE
-import pickle
 import scipy.io
-import pylab
 import argparse
+import csv
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 
 model = {}
 vgg_layers = None
@@ -24,7 +25,8 @@ def build_graph(graph):
     def weights_and_biases(layer_index):
         W = tf.constant(vgg_layers[0][layer_index][0][0][2][0][0])
         b = vgg_layers[0][layer_index][0][0][2][0][1]
-        b = tf.constant(np.reshape(b, (b.size))) # need to reshape b from size (64,1) to (64,)
+        # need to reshape b since each element is wrapped in length 1 array
+        b = tf.constant(np.reshape(b, (b.size)))
         layer_name = vgg_layers[0][layer_index][0][0][0][0]
         return W,b
 
@@ -36,14 +38,16 @@ def build_graph(graph):
         W,b = weights_and_biases(2)
         model['conv1_2'] = tf.nn.conv2d(model['relu1_1'], W, [1,1,1,1], 'SAME') + b
         model['relu1_2'] = tf.nn.relu(model['conv1_2'])
-        model['pool1'] = tf.nn.avg_pool(model['relu1_2'], ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+        model['pool1'] = tf.nn.avg_pool(model['relu1_2'], ksize=[1, 2, 2, 1], 
+            strides=[1, 2, 2, 1], padding='SAME')
         W,b = weights_and_biases(5)
         model['conv2_1'] = tf.nn.conv2d(model['pool1'], W, [1,1,1,1], 'SAME') + b
         model['relu2_1'] = tf.nn.relu(model['conv2_1'])
         W,b = weights_and_biases(7)
         model['conv2_2'] = tf.nn.conv2d(model['relu2_1'], W, [1,1,1,1], 'SAME') + b
         model['relu2_2'] = tf.nn.relu(model['conv2_2'])
-        model['pool2'] = tf.nn.avg_pool(model['relu2_2'], ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+        model['pool2'] = tf.nn.avg_pool(model['relu2_2'], ksize=[1,2,2,1], 
+            strides=[1,2,2,1], padding='SAME')
         W,b = weights_and_biases(10)
         model['conv3_1'] = tf.nn.conv2d(model['pool2'], W, [1,1,1,1], 'SAME') + b
         model['relu3_1'] = tf.nn.relu(model['conv3_1'])
@@ -56,7 +60,8 @@ def build_graph(graph):
         W,b = weights_and_biases(16)
         model['conv3_4'] = tf.nn.conv2d(model['relu3_3'], W, [1,1,1,1], 'SAME') + b
         model['relu3_4'] = tf.nn.relu(model['conv3_4'])
-        model['pool3'] = tf.nn.avg_pool(model['relu3_4'], ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+        model['pool3'] = tf.nn.avg_pool(model['relu3_4'], ksize=[1,2,2,1], 
+            strides=[1,2,2,1], padding='SAME')
         W,b = weights_and_biases(19)
         model['conv4_1'] = tf.nn.conv2d(model['pool3'], W, [1,1,1,1], 'SAME') + b
         model['relu4_1'] = tf.nn.relu(model['conv4_1'])
@@ -69,7 +74,8 @@ def build_graph(graph):
         W,b = weights_and_biases(25)
         model['conv4_4'] = tf.nn.conv2d(model['relu4_3'], W, [1,1,1,1], 'SAME') + b
         model['relu4_4'] = tf.nn.relu(model['conv4_4'])
-        model['pool4'] = tf.nn.avg_pool(model['relu4_4'], ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+        model['pool4'] = tf.nn.avg_pool(model['relu4_4'], ksize=[1,2,2,1], 
+            strides=[1,2,2,1], padding='SAME')
         W,b = weights_and_biases(28)
         model['conv5_1'] = tf.nn.conv2d(model['pool4'], W, [1,1,1,1], 'SAME') + b
         model['relu5_1'] = tf.nn.relu(model['conv5_1'])
@@ -82,7 +88,8 @@ def build_graph(graph):
         W,b = weights_and_biases(34)
         model['conv5_4'] = tf.nn.conv2d(model['relu5_3'], W, [1,1,1,1], 'SAME') + b
         model['relu5_4'] = tf.nn.relu(model['conv5_4'])
-        model['pool5'] = tf.nn.avg_pool(model['relu5_4'], ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+        model['pool5'] = tf.nn.avg_pool(model['relu5_4'], ksize=[1,2,2,1], 
+            strides=[1,2,2,1], padding='SAME')
 
 # read in image as array of pixels (RGB) and truncate to 224 x 224
 def get_imarray(filename):
@@ -101,7 +108,11 @@ def flattened_gram(imarray, session):
     grams = np.empty([EMBED_SIZE])    
     index = 0
     for i in range(5):
-        grams[index:(NUM_CHANNELS[i]**2 + index)] = gram_matrix(session.run(model['conv' + str(i+1) + '_1'], feed_dict={model['image']: imarray}), NUM_CHANNELS[i], LAYER_IM_SIZE[i]**2).flatten()
+        grams[index:(NUM_CHANNELS[i]**2 + index)] = gram_matrix(
+            session.run(model['conv' + str(i+1) + '_1'], 
+                feed_dict={model['image']: imarray}), 
+            NUM_CHANNELS[i], 
+            LAYER_IM_SIZE[i]**2).flatten()
         index += NUM_CHANNELS[i]**2
     return grams
 
@@ -110,19 +121,70 @@ def distance(fg1, fg2):
     dist = 0
     index = 0
     for i in range(5):
-        square_1 = np.reshape(fg1[index:NUM_CHANNELS[i]**2 + index], (NUM_CHANNELS[i], NUM_CHANNELS[i]))
-        square_2 = np.reshape(fg2[index:NUM_CHANNELS[i]**2 + index], (NUM_CHANNELS[i], NUM_CHANNELS[i]))
+        square_1 = np.reshape(fg1[index:NUM_CHANNELS[i]**2 + index], 
+            (NUM_CHANNELS[i], NUM_CHANNELS[i]))
+        square_2 = np.reshape(fg2[index:NUM_CHANNELS[i]**2 + index], 
+            (NUM_CHANNELS[i], NUM_CHANNELS[i]))
         index += NUM_CHANNELS[i]**2
-        dist += (1.0 / (4 * NUM_CHANNELS[i] * LAYER_IM_SIZE[i]**2)) * (np.linalg.matrix_power(square_1 - square_2, 2)).sum()
+        dist += (1.0 / (4 * NUM_CHANNELS[i]**2 * LAYER_IM_SIZE[i]**4)) * (
+            np.linalg.matrix_power(square_1 - square_2, 2)).sum()
     return dist
+
+# gets labels from csv file and returns list of labels matching given list of filenames
+def get_labels(filenames, labels_csv):
+    labels_dict = {}
+    with open(labels_csv) as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            labels_dict[row['filename']] = int(row['label'])
+    labels_list = []
+    for filename in filenames:
+        labels_list.append(labels_dict[filename])
+    return labels_list
+
+def plot(plot_data, im_dir):
+    embeddings = plot_data['embeddings']
+    filenames = plot_data['filenames']
+    labels = None
+    if 'labels' in plot_data:
+        labels = plot_data['labels']
+
+    x = embeddings[:, 0]
+    y = embeddings[:, 1]
+
+    def onpick(event):
+        nonlocal subfig,ax_list
+        ax_list[1].clear()
+        ind = event.ind[0] # event.ind returns list -> take first element
+        img = mpimg.imread(os.path.join(im_dir, str(filenames[ind])))
+        ax_list[1].imshow(img, cmap='gray')    
+        plt.draw()
+        print(ind, filenames[ind])
+
+    subfig, ax_list = plt.subplots(1,2)
+
+    pid = subfig.canvas.mpl_connect('pick_event', onpick)
+    
+    if labels != None:
+        scatter = ax_list[0].scatter(x, y, c=labels, cmap="hot", alpha=0.5, picker=True)
+        subfig.subplots_adjust(left=0.25)
+        cbar_ax = subfig.add_axes([0.05, 0.15, 0.05, 0.7])
+        subfig.colorbar(scatter, cax=cbar_ax)
+    else:
+        scatter = ax_list[0].scatter(x, y, alpha=0.5, picker=True)
+
+    plt.show()
+    subfig.canvas.mpl_disconnect(pid)
 
 def main():
     global vgg_layers
     # parse the command line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('im_dir', help="directory containing the input images")
-    parser.add_argument('-l', '--labels', help="csv file containing numerical image labels by filename")
-    parser.add_argument('-d', '--dump', help="location to dump the 2D image style embeddings")
+    parser.add_argument('-l', '--labels', 
+        help="csv file containing numerical image labels by filename")
+    parser.add_argument('-d', '--dump', 
+        help="location to dump the 2D image style embeddings")
     
     args = parser.parse_args()
 
@@ -137,6 +199,7 @@ def main():
     print("Tensorflow graph built...")
     del vgg # to free up memory
 
+    # get image filenames from image directory
     filenames = []
     for filename in os.listdir(args.im_dir):
         if os.path.splitext(filename)[1] in ('.jpg', '.png'):
@@ -147,7 +210,8 @@ def main():
     with tf.Session(graph=graph) as sess:
         count = 0
         for filename in filenames:
-            embeddings[count, :] = flattened_gram(get_imarray(os.path.join(args.im_dir ,filename)), sess)
+            embeddings[count, :] = flattened_gram(
+                get_imarray(os.path.join(args.im_dir ,filename)), sess)
             count += 1
             if count % 10 == 0:
                 print("Embedded " + str(count) + " images")
@@ -161,24 +225,16 @@ def main():
 
     plot_data = {'embeddings': two_d_embeddings, 'filenames': filenames}
 
+    if args.labels != None:
+        labels = get_labels(filenames, args.labels)
+        plot_data['labels'] = labels
+
     if args.dump != None:
-        pickle.dump( plot_data, open( os.path.join(args.dump, os.path.split(args.im_dir)[1]) + '_embed.pickle', "wb" ) )
+        pickle.dump( plot_data, 
+            open( os.path.join(args.dump, os.path.split(args.im_dir)[1]) + '_embed.pickle', "wb" ) )
         print("Pickle dumped")
 
-    # def plot(embeddings):
-    #   fig = pylab.figure(figsize=(15,15))  # in inches
-    #   x = embeddings[:, 0]
-    #   y = embeddings[:, 1]
-    #   def onpick3(event):
-    #     ind = event.ind[0]
-    #     print(filenames[ind], np.take(x, ind), np.take(y, ind))
-    #   pylab.scatter(x, y, picker=True)
-    #   fig.canvas.mpl_connect('pick_event', onpick3)
-    #   # pylab.colorbar()
-    #   pylab.show()
-
-
-    # plot(two_d_embeddings)
+    plot(plot_data, args.im_dir)
 
 if __name__ == "__main__":
     main()
