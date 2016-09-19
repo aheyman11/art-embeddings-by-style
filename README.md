@@ -20,7 +20,7 @@ python embed_by_style.py [path_to_image_directory]
 All files in the specified directory with a `.png` or `.jpg` extension will be included in the visualization.
 
 ### Options
-The flag
+The optional flag
 ```
 -l [label_csv_file]
 ```
@@ -30,7 +30,7 @@ takes a csv file of numerical image labels. The csv file must have a heading of 
 - artistic school
 
 
-The flag
+The optional flag
 ```
 -d [path_to_dump_location]
 ```
@@ -50,3 +50,4 @@ python embed_by_style.py sample/picasso -d sample -l sample/picasso.csv
 ```
 uses the labels in the csv file to color images on the scatter plot and dumps a pickle file `picasso_embed.pickle` in the folder `sample`. 
 The following scatterplot is generated:
+<img src="https://github.com/aheyman11/art_embeddings/blob/master/sample/screenshot.png"/>
