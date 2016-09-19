@@ -43,7 +43,7 @@ python embed_by_style.py --help
 ```
 
 ## Example
-A sample image folder containing selected works of Picasso (courtesty of [WikiArt](www.wikiart.org)) can be found in `sample/picasso`. The file `picasso.csv` labels each image by year of creation.
+A sample image folder containing selected works of Picasso (courtesty of [WikiArt](http://www.wikiart.org)) can be found in `sample/picasso`. The file `picasso.csv` labels each image by year of creation.
 Running the command
 ```
 python embed_by_style.py sample/picasso -d sample -l sample/picasso.csv
